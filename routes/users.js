@@ -1,23 +1,41 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const express = require('express');
+const User = require('../models/User');
+const { protect, adminOnly } = require('../middleware/auth');
 
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true },
-  password: { type: String, required: true, minlength: 6 },
-  role: { type: String, enum: ['admin', 'user', 'guest'], default: 'user' },
-  color: { type: String, default: '#7c6fff' },
-  resetPasswordToken: String,
-  resetPasswordExpire: Date,
-}, { timestamps: true });
+const router = express.Router();
 
-userSchema.pre('save', async function () {
-  if (!this.isModified('password')) return;
-  this.password = await bcrypt.hash(this.password, 10);
+// Get all users
+router.get('/', protect, async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
+// Update user role (admin only)
+router.put('/:id/role', protect, adminOnly, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { role: req.body.role },
+      { new: true }
+    ).select('-password');
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
-module.exports = mongoose.model('User', userSchema);
+// Delete user (admin only)
+router.delete('/:id', protect, adminOnly, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ message: 'User deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;
