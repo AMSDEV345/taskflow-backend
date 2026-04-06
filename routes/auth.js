@@ -1,7 +1,9 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
 const { protect } = require('../middleware/auth');
+const sendEmail = require('../utils/sendEmail');
 
 const router = express.Router();
 
@@ -72,6 +74,57 @@ router.post('/push-subscribe', protect, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user._id, { pushSubscription: req.body }, { new: true });
     res.json({ message: 'Subscribed to push notifications' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Forgot Password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) return res.status(404).json({ message: 'No account with that email' });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = token;
+    user.resetPasswordExpire = Date.now() + 30 * 60 * 1000;
+    await user.save();
+
+    const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
+
+    await sendEmail({
+      to: user.email,
+      subject: 'TaskFlow Password Reset',
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Click the link below to reset your password. It expires in 30 minutes.</p>
+        <a href="${resetUrl}" style="background:#7c6fff;color:white;padding:10px 20px;border-radius:5px;text-decoration:none;">Reset Password</a>
+        <p>If you didn't request this, ignore this email.</p>
+      `,
+    });
+
+    res.json({ message: 'Reset link sent to your email' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Reset Password
+router.post('/reset-password/:token', async (req, res) => {
+  try {
+    const user = await User.findOne({
+      resetPasswordToken: req.params.token,
+      resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) return res.status(400).json({ message: 'Invalid or expired token' });
+
+    user.password = req.body.password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    res.json({ message: 'Password reset successful' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
