@@ -1,41 +1,25 @@
-const express = require('express');
-const User = require('../models/User');
-const { protect, adminOnly } = require('../middleware/auth');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
-const router = express.Router();
-
-// Get all users
-router.get('/', protect, async (req, res) => {
-  try {
-    const users = await User.find().select('-password');
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+const userSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, default: 'user' },
+  resetToken: String,
+  resetTokenExpiry: Date,
 });
 
-// Update user role (admin only)
-router.put('/:id/role', protect, adminOnly, async (req, res) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { role: req.body.role },
-      { new: true }
-    ).select('-password');
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// Delete user (admin only)
-router.delete('/:id', protect, adminOnly, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: 'User deleted' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+// Compare password method
+userSchema.methods.matchPassword = async function(enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
 
-module.exports = router;
+module.exports = mongoose.model('User', userSchema);
