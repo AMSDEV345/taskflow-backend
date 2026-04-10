@@ -1,10 +1,16 @@
-const { Resend } = require('resend');
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+  const nodemailer = require('nodemailer');
 
 const sendEmail = async ({ to, subject, html }) => {
-  await resend.emails.send({
-    from: 'TaskFlow <onboarding@resend.dev>',
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"TaskFlow" <${process.env.EMAIL_USER}>`,
     to,
     subject,
     html,
