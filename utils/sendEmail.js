@@ -11,4 +11,4 @@ const sendEmail = async ({ to, subject, html }) => {
   });
 };
 
-module.exports = sendEmail; git 
+module.exports = sendEmail; 
